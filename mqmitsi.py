@@ -27,51 +27,65 @@ class Handler(object):
         self.client.will_set(will_topic, '0', qos=1, retain=True)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
+        #self.client.on_subscribe = self.on_subscribe
+        log.info('Connecting to MQTT broker: %s', self.broker)
         self.client.connect(broker)
         self.publish('connected', 1, qos=1, retain=True)
         self.connected_state = 1
-        self.client.subscribe('%s/command/#' % prefix)
+        self.timeToSend = 60
 
         self.hp = HeatPump(serial_port)
         self.hp.connect()
 
     def on_connect(self, client, userdata, flags, rc):
-        log.info('Connected to MQTT broker: %s', self.broker)
+        if rc == 0:
+            self.client.subscribe('%s/command/#' % self.prefix)
+            log.info('Connected to MQTT broker (code=%s)', rc)
+        else:
+            log.info('Failed to connect to MQTT broker(code=%s)', rc)
+
+    #def on_subscribe(self, client, mid, granted_qos, somethingelse):
+        #log.info(granted_qos)
 
     def publish(self, topic, payload, **kwargs):
         topic = '%s/%s' % (self.prefix, topic)
         self.client.publish(topic, payload, **kwargs)
-
+ 
     def run(self):
         while self.running:
             self.hp.loop()
-            if self.hp.valid and self.hp.dirty:
+            if (self.hp.valid and self.hp.dirty) or self.timeToSend < 0:
                 if self.connected_state != 2:
                     self.publish('connected', 2, qos=1, retain=True)
                     self.connected_state = 2
-                self.publish('state',
-                             json.dumps(self.hp.to_dict()), retain=True)
+                # log.debug('MQTT: Publishing status to /state topic')
+                self.publish('state', json.dumps(self.hp.to_dict()), retain=True)
+                log.info("MQTT TX : %s : %s" % ('state', json.dumps(self.hp.to_dict())))
                 self.hp.dirty = False
+                self.timeToSend = 60
             if self.client.loop() != 0:
                 log.warning('Disonnected from MQTT broker: %s', self.broker)
                 try:
                     self.client.connect(self.broker)
                 except:
                     time.sleep(1)
+            self.timeToSend = self.timeToSend - 1
 
     def on_message(self, client, userdata, msg):
-        log.debug('MQTT Message: %s : %s' % (msg.topic, msg.payload))
+        log.debug('MQTT RX : %s : %s' % (msg.topic, msg.payload))
         topic = msg.topic
         if self.prefix:
             topic = topic.partition('%s/' % self.prefix)[2]
         msg_type, s, topic = topic.partition('/')
         if msg_type == 'command':
-            if topic == 'state':
+            if topic == 'set':
                 try:
                     state = json.loads(msg.payload)
                 except ValueError:
                     log.warning('Invalid JSON: %s' % msg.payload)
                 self.hp.set(state)
+            if topic == 'status':
+                self.timeToSend = 0
 
     def cleanup(self, signum, frame):
         self.running = False

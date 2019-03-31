@@ -131,7 +131,7 @@ CONTROL_PACKET_POSITIONS = LookupDict({
 
 
 class HeatPump(object):
-    attributes = ('power', 'mode', 'temp', 'fan', 'vane', 'dir', 'room_temp')
+    attributes = ('power', 'mode', 'temp', 'fan', 'vane', 'dir', 'room_temp', 'operating')
 
     def __init__(self, port=None, **kwargs):
         self.port = port
@@ -139,6 +139,7 @@ class HeatPump(object):
             setattr(self, item, kwargs.get(item, None))
         self.dirty = True
         self.room_temp = None
+        self.operating = False
         self.info_packet_index = 0
         self.last_send = 0
         self.current_packet = None
@@ -177,7 +178,7 @@ class HeatPump(object):
     def connect(self):
         if self.port:
             self.ser = serial.Serial(
-                self.port, 2400, parity=serial.PARITY_EVEN, timeout=0)
+                self.port, 9600, parity=serial.PARITY_EVEN, timeout=0)
             self.ser.write(bytearray(self.start_packet.bytes))
 
     def loop(self):
@@ -194,26 +195,43 @@ class HeatPump(object):
                 self.current_packet.data_len = val
             if self.current_packet.complete:
                 if self.current_packet.valid:
-                    if self.current_packet.data[0] == 0x02:  # Set Packet
+                    if self.current_packet.data[0] != 0x02 and self.current_packet.data[0] != 0x03:
+                        log.debug('HP RX   : 0x%x : %s : 0x%x' % (
+                            self.current_packet.type, ','.join(
+                                ['%02x' % x for x in self.current_packet.data]),
+                            self.current_packet.checksum))
+                    if self.current_packet.data[0] == 0x02:  # Setting Packet
+                        # log.debug('Status: POWER: %s' % POWER.lookup(self.current_packet.data[3]) + 
+                        # ', MODE: %s' % MODE.lookup(self.current_packet.data[4]) + 
+                        # ', TEMP: %s' % TEMP.lookup(self.current_packet.data[5]) + 
+                        # ', FAN: %s' % FAN.lookup(self.current_packet.data[6]) + 
+                        # ', VANE: %s' % VANE.lookup(self.current_packet.data[7]) +
+                        # ', DIR: %s' % DIR.lookup(self.current_packet.data[10]));
+
+
                         self.power = POWER.lookup(self.current_packet.data[3])
                         self.mode = MODE.lookup(self.current_packet.data[4])
                         self.temp = TEMP.lookup(self.current_packet.data[5])
                         self.fan = FAN.lookup(self.current_packet.data[6])
                         self.vane = VANE.lookup(self.current_packet.data[7])
                         self.dir = DIR.lookup(self.current_packet.data[10])
-                    if self.current_packet.data[0] == 0x03:  # Temp Packet
-                        self.room_temp = ROOM_TEMP.lookup(
-                            self.current_packet.data[3])
-
+                    if self.current_packet.data[0] == 0x03:  # Room Temp Packet
+                        # log.debug('Status: ROOM_TEMP: %s' % ROOM_TEMP.lookup(self.current_packet.data[3]));
+                        self.room_temp = ROOM_TEMP.lookup(self.current_packet.data[3])
+                    if self.current_packet.data[0] == 0x06: # Operating Packet
+                        log.debug('Operating Packet: 0x%x : %s : 0x%x' % (
+                            self.current_packet.type, ','.join(
+                                ['%02x' % x for x in self.current_packet.data]),
+                            self.current_packet.checksum))                        
                     if self.current_packet.data[0] in self.packet_history and \
                        self.current_packet == self.packet_history[
                        self.current_packet.data[0]]:
                         pass
-                    else:
-                        log.debug('HP Packet: 0x%x : %s : 0x%x' % (
-                            self.current_packet.type, ','.join(
-                                ['%02x' % x for x in self.current_packet.data]),
-                            self.current_packet.checksum))
+                    # else:
+                    #     log.debug('HP Packet: 0x%x : %s : 0x%x' % (
+                    #         self.current_packet.type, ','.join(
+                    #             ['%02x' % x for x in self.current_packet.data]),
+                    #         self.current_packet.checksum))
                     self.packet_history[
                         self.current_packet.data[0]] = self.current_packet
                     self.current_packet = None
@@ -228,7 +246,7 @@ class HeatPump(object):
                 wanted.from_dict(self.wanted_state)
                 packet = self.diff(wanted)
                 if packet:
-                    log.debug('Sending packet: 0x%x : %s : 0x%x' % (
+                    log.debug('HP TX   : 0x%x : %s : 0x%x' % (
                               packet.type,
                               ','.join(['%02x' % x for x in packet.data]),
                               packet.checksum))

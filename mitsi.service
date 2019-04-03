@@ -5,6 +5,10 @@ After=multi-user.target
 [Service]
 Type=idle
 ExecStart=/usr/bin/python /home/pi/MQMitsi/mqmitsi.py --mqtt-host $mqtthost --mqtt-prefix $mqttprefix
+Restart=always
+RestartSec=60
+StartLimitInterval=300
+StartLimitBurst=3
 
 [Install]
 WantedBy=multi-user.target

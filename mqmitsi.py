@@ -95,18 +95,13 @@ class Handler(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Bridge Mitsi and MQTT')
-    parser.add_argument('--mqtt-host',
-                        default='localhost', help='MQTT broker')
-#    parser.add_argument('--mqtt-port',
-#                        default='1883', type=int, help='MQTT port')
-    parser.add_argument('--mqtt-prefix',
-                        default='mqmitsi',
-                        help='MQTT topic prefix prepended to messages')
-    parser.add_argument('--serial-port',
-                        default='/dev/ttyAMA0',
-                        help='Serial device to communicate on')
-    parser.add_argument('--log',
-                        help='Set log level. Defaults to WARNING')
+    parser.add_argument('--mqtt-host', default='localhost', help='MQTT broker')
+    parser.add_argument('--mqtt-user', help='MQTT broker user')
+    parser.add_argument('--mqtt-password', help='MQTT broker password')
+#    parser.add_argument('--mqtt-port', default='1883', type=int, help='MQTT port')
+    parser.add_argument('--mqtt-prefix', default='mqmitsi', help='MQTT topic prefix prepended to messages')
+    parser.add_argument('--serial-port', default='/dev/ttyAMA0', help='Serial device to communicate on')
+    parser.add_argument('--log', help='Set log level. Defaults to WARNING')
     args = parser.parse_args()
 
     log = logging.getLogger()
@@ -119,5 +114,5 @@ if __name__ == '__main__':
     if args.log:
         console.setLevel(args.log)
 
-    h = Handler(args.serial_port, broker=args.mqtt_host, prefix=args.mqtt_prefix)
+    h = Handler(args.serial_port, broker=args.mqtt_host, prefix=args.mqtt_prefix, user=args.mqtt_user, password=args.mqtt_password)
     h.run()
